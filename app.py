@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
@@ -294,32 +295,26 @@ def clean_df(df, month_name):
     df["Month Name"] = df["Month"].map(month_map).fillna(month_name)
     return df
 
-@st.cache_data(ttl=3600, show_spinner="⏳ Loading 2026 data from GitHub...")
+@st.cache_data(ttl=3600)
 def load_all_data() -> pd.DataFrame:
     frames = []
     for month_name, info in MONTHLY_FILES.items():
         try:
-            # Try configured sheet name first, then auto-detect
-            xl = pd.ExcelFile(info["url"], engine="openpyxl")
-            available_sheets = xl.sheet_names
-            # Find best matching sheet
-            sheet = None
-            for s in available_sheets:
-                if "COPPER" in s.upper() and "2026" in s:
-                    sheet = s
-                    break
-            if sheet is None:
-                sheet = available_sheets[0]  # fallback to first sheet
-            df = pd.read_excel(xl, sheet_name=sheet, header=4, engine="openpyxl")
+            try:
+                df = pd.read_excel(info["url"], sheet_name=info["sheet"],
+                                   header=4, engine="openpyxl")
+            except Exception:
+                xl = pd.ExcelFile(info["url"], engine="openpyxl")
+                sheet = next((s for s in xl.sheet_names if "COPPER" in s.upper()), xl.sheet_names[0])
+                df = pd.read_excel(xl, sheet_name=sheet, header=4, engine="openpyxl")
             df = clean_df(df, month_name)
             frames.append(df)
         except Exception as e:
-            st.warning(f"⚠️ Could not load {month_name}: {e}")
+            pass  # silently skip failed months
     if not frames:
         st.error("❌ No data could be loaded. Check GitHub file names.")
         st.stop()
-    combined = pd.concat(frames, ignore_index=True)
-    return combined
+    return pd.concat(frames, ignore_index=True)
 
 
 # ─────────────────────────────────────────────
@@ -1146,4 +1141,3 @@ st.markdown("""
   Built with Streamlit & Plotly
 </div>
 """, unsafe_allow_html=True)
-
